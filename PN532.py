@@ -1,7 +1,7 @@
 import nfc
 import time
 import binascii
-
+import re
 
 class PN532:
     def __init__(self, dev, aid, callback):
@@ -40,6 +40,7 @@ class TagHandler:
         self.aid = aid
         self.callback = callback
         self.lastType2Tag = {'time': time.time(), 'uid': ''}
+        
 
     def __byteArrayToHexString(self, bArray):
         return binascii.hexlify(bytearray(bArray)).decode('ascii').upper()
@@ -54,6 +55,7 @@ class TagHandler:
         else:
             print("error: unsupported tag type")
 
+
     def handleType2Tag(self, tag):
         uid = self.__byteArrayToHexString(tag.identifier)
         # type2tag is_present attr is always False, so we need a bit of a cheat to detect it's release
@@ -61,7 +63,17 @@ class TagHandler:
         if ((time.time() - self.lastType2Tag['time']) > 1.0) or uid != self.lastType2Tag['uid']:
             self.callback('Type2Tag', uid)
             
-        print(tag.ndef._data)
+        
+        try:
+          msg = tag.ndef._data.decode("utf-8", errors="ignore")
+          parse = msg.split('[[')[1].split(']]')[0]
+          print(parse)
+          
+        except BaseException as e:
+            print('Failed to do something: ' + str(e))
+
+        
+        
         
 
         # always reset time if tag is detected and save uid of tag
@@ -82,3 +94,4 @@ class TagHandler:
 
         uid = self.__byteArrayToHexString(data)
         self.callback('Type4ATag', uid)
+        
