@@ -1,15 +1,45 @@
 import tkinter as tk
 from PN532 import PN532
+from Crypto.Cipher import AES
+from AESED import AESCBC
+
 import RPi.GPIO as GPIO
 import sys
 import os
 import time
 import threading
+import base64
+import re
+import codecs
+import requests
+import json
 
+
+
+timeSinceLast = None
+pn532 = None
 
 def callbackPN532(tag, id):
-        print('Found tag: {}, id: {}'.format(tag, id))
+        print('Found tag: {}, id: {}'.format(tag, id)) 
         pn532.close()
+        
+        identifier = id.split(":")
+        r = requests.post("https://medicalidou.com/login.php", data={'email': identifier[0]})
+        data = json.loads(r.text)
+        
+        name = data["MID_Name"].split(":")
+        AES_inst = AESCBC(identifier[1], name[1])
+        nameDec = AES_inst.decrypt(name[0])
+        
+        nfcScan(nameDec)
+        
+        
+        if(":" in id):
+            os.system('python3 tagtool.py --device "tty:AMA0" format tt2')
+            
+
+
+
 
 
 pn532 = PN532('tty:AMA0', 'A0000001020304', callbackPN532)
@@ -36,41 +66,53 @@ class App(threading.Thread):
         self.start()
 
     def run(self):
-        Listening = False
-        #Initialize SR-04 Stuff
-        GPIO.setmode(GPIO.BOARD)
-        PIN_TRIGGER = 7
-        PIN_ECHO = 11
-        GPIO.setup(PIN_TRIGGER, GPIO.OUT)
-        GPIO.setup(PIN_ECHO, GPIO.IN)
-        GPIO.output(PIN_TRIGGER, GPIO.LOW)
-        print ("Waiting for sensor to settle")
-        time.sleep(2)
-        while True:
-            
-            print ("Calculating distance")
+        try:
+            GPIO.setmode(GPIO.BOARD)
+            GPIO.setwarnings(False)
 
-            GPIO.output(PIN_TRIGGER, GPIO.HIGH)
+            TRIG = 7
+            ECHO = 11
+            maxTime = 0.04
 
-            time.sleep(0.00001)
+            while True:
+                GPIO.setup(TRIG,GPIO.OUT)
+                GPIO.setup(ECHO,GPIO.IN)
 
-            GPIO.output(PIN_TRIGGER, GPIO.LOW)
+                GPIO.output(TRIG,False)
 
-            while GPIO.input(PIN_ECHO)==0:
-                pulse_start_time = time.time()
-            while GPIO.input(PIN_ECHO)==1:
-                pulse_end_time = time.time()
+                time.sleep(0.01)
 
-            pulse_duration = pulse_end_time - pulse_start_time
-            distance = round(pulse_duration * 17150, 2)
-            print ("Distance:",distance,"cm")
-            
-            if distance < 25:
-                Listening = True
-                listen = pn532.listen()
-            else:
-                Listening = False
-                pn532.close()
+                GPIO.output(TRIG,True)
+
+                time.sleep(0.00001)
+
+                GPIO.output(TRIG,False)
+
+                pulse_start = time.time()
+                timeout = pulse_start + maxTime
+                while GPIO.input(ECHO) == 0 and pulse_start < timeout:
+                    pulse_start = time.time()
+
+                pulse_end = time.time()
+                timeout = pulse_end + maxTime
+                while GPIO.input(ECHO) == 1 and pulse_end < timeout:
+                    pulse_end = time.time()
+
+                pulse_duration = pulse_end - pulse_start
+                distance = round(pulse_duration * 17150, 2)
+
+                print(distance)
+                
+                
+                if distance < 25:
+                    currentTime = round(time.time() * 1000)
+                    time.sleep(3)
+                    while round(time.time() * 1000) < (currentTime + 6000): 
+                        listen = pn532.listen()
+                else:
+                    pn532.close()
+        except:
+            GPIO.cleanup()
             
             
             '''
@@ -109,13 +151,20 @@ titleLbl.config(fg='#03adfc')
 label2 = tk.Label(win, text = "Scan Phone Here\n...")
 label2.config(font=labelfont)
 
+label3 = None
 
-fName = "Yousif" 
-label3 = tk.Label(win, text = "Data Transfer Complete!\nWelcome " + fName)
-label3.config(font=labelfont)
+def clearName():
+    label3.destroy()
+    label2 = tk.Label(win, text = "Scan Phone Here\n...")
+    label2.config(font=labelfont)
+    label2.pack(pady=300)
+    
 
-
-def nfcScan():
+def nfcScan(name):
+    
+    label3 = tk.Label(win, text = "Data Transfer Complete!\nWelcome " + name)
+    label3.config(font=labelfont)
+    
     label2.destroy()
     simBtn.destroy()
     label3.pack(pady=300)

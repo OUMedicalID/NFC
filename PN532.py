@@ -61,15 +61,17 @@ class TagHandler:
         # type2tag is_present attr is always False, so we need a bit of a cheat to detect it's release
         # if previous tag was detected > 1 second ago => this must be a new placed tag => callback
         if ((time.time() - self.lastType2Tag['time']) > 1.0) or uid != self.lastType2Tag['uid']:
-            self.callback('Type2Tag', uid)
+            #self.callback('Type2Tag', uid)
+            x = 1
             
         
         try:
           msg = tag.ndef._data.decode("utf-8", errors="ignore")
           parse = msg.split('[[')[1].split(']]')[0]
-          print(parse)
+          self.callback('Type2Tag', parse)
           
         except BaseException as e:
+            self.callback('Type2Tag', '00')
             print('Failed to do something: ' + str(e))
 
         
